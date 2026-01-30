@@ -1,0 +1,305 @@
+# GRPO Enhanced Math Rewards - Optimized for 2x H200 GPUs
+# Based on grpo_nanov3.yaml with adjustments for 2-GPU setup
+# Multi-component scoring + difficulty scaling enabled
+
+grpo:
+  num_prompts_per_step: 16  # Reduced from 128 for 2 GPUs
+  num_generations_per_prompt: 8  # Reduced from 16 to fit memory
+  num_val_generations_per_prompt: 4
+  max_rollout_turns: 1
+  max_num_epochs: 1
+  max_num_steps: 1000000
+  normalize_rewards: true
+  use_leave_one_out_baseline: true
+  val_period: 10  # Increased from 5 to save time
+  val_at_start: False
+  overlong_filtering: false
+  max_val_samples: null
+  val_batch_size: 32  # Reduced from 256 for memory
+  seed: 42
+  async_grpo:
+    enabled: false
+    max_trajectory_age_steps: 1
+  
+  # Best@k training configuration
+  use_best_at_k: False
+  best_at_k_k: 4  # Reduced from 8 to match smaller num_generations_per_prompt
+  best_at_k_m: 1000
+  
+  # Combined training
+  use_combined_training: false
+  combined_training_weight_mode: "auto"
+  combined_training_best_at_k_weight: 0.2
+  combined_training_pass_at_1_weight: 1.0
+  
+  # Dynamic sampling
+  dynamic_sampling_oversample_ratio: 1.0
+
+  batch_multiplier: 1
+  use_dynamic_sampling: False
+  reward_shaping:
+    enabled: False
+  reward_scaling:
+    enabled: False
+
+  seq_logprob_error_threshold: 2
+
+loss_fn:
+  reference_policy_kl_penalty: 0
+  reference_policy_kl_type: k3
+  kl_input_clamp_value: null
+  kl_output_clamp_value: null
+  ratio_clip_min: 0.2
+  ratio_clip_max: 0.28
+  ratio_clip_c: null
+  use_on_policy_kl_approximation: True
+  use_importance_sampling_correction: True
+  sequence_level_importance_ratios: False
+  token_level_loss: True
+  truncated_importance_sampling_ratio: null
+
+checkpointing:
+  enabled: true
+  checkpoint_dir: "results/grpo_2xH200"
+  metric_name: "val:total_reward/mean"
+  higher_is_better: true
+  keep_top_k: 5  # Keep fewer checkpoints to save disk space
+  save_period: 20  # Save less frequently
+  checkpoint_must_save_by: "00:03:40:00"
+
+policy:
+  model_name: "/path/to/hf_checkpoint"
+  tokenizer:
+    name: ${policy.model_name}
+  train_global_batch_size: 128  # Reduced from 2048 for 2 GPUs
+  train_micro_batch_size: 1
+  generation_batch_size: 16  # Reduced from 64
+  logprob_batch_size: 1
+  max_total_sequence_length: 16384  # Reduced from 49152 to fit memory
+  precision: "bfloat16"
+  logprob_chunk_size: 2048
+
+  dtensor_cfg:
+    _v2: true
+    enabled: false
+    cpu_offload: False
+    sequence_parallel: false
+    activation_checkpointing: false
+    tensor_parallel_size: 1
+    context_parallel_size: 1
+    custom_parallel_plan: null
+  
+  megatron_cfg:
+    enabled: true
+    empty_unused_memory_level: 2  # Increased from 1 for better memory management
+    activation_checkpointing: true
+    bias_activation_fusion: False
+    
+    # Parallelism settings for 2 GPUs
+    tensor_model_parallel_size: 1  # No TP with only 2 GPUs
+    expert_tensor_parallel_size: 1
+    expert_model_parallel_size: 1  # Reduced from 8
+    pipeline_model_parallel_size: 2  # Use both GPUs for pipeline
+    num_layers_in_first_pipeline_stage: null
+    num_layers_in_last_pipeline_stage: null
+    context_parallel_size: 1  # Reduced from 4
+    pipeline_dtype: ${policy.precision}
+    sequence_parallel: false  # Disabled with TP=1
+    
+    freeze_moe_router: true
+    moe_router_dtype: "fp32"
+    moe_router_load_balancing_type: "none"
+    moe_router_bias_update_rate: 1e-3
+    moe_permute_fusion: true
+    moe_enable_deepep: false 
+    moe_token_dispatcher_type: "alltoall"
+    moe_aux_loss_coeff: 0.0
+    moe_router_enable_expert_bias: true
+    apply_rope_fusion: True
+    defer_fp32_logits: True
+    track_moe_metrics: True
+    moe_per_layer_logging: False  # Disabled to reduce logging overhead
+    do_not_average_loss: true
+    cp_normalize: true
+    calculate_per_token_loss: true
+    scale_loss_by_dp_cp_size: false
+
+    optimizer:
+      optimizer: "adam"
+      lr: 3e-6
+      min_lr: 3e-6
+      weight_decay: 0.0
+      bf16: true
+      fp16: false
+      params_dtype: "float32"
+
+      adam_beta1: 0.9
+      adam_beta2: 0.999
+      adam_eps: 1e-8
+
+      sgd_momentum: 0.9
+
+      clip_grad: ${policy.max_grad_norm}
+
+      use_distributed_optimizer: true
+      use_precision_aware_optimizer: true
+
+      optimizer_cpu_offload: False
+      optimizer_offload_fraction: 0
+
+    scheduler:
+      start_weight_decay: ${policy.megatron_cfg.optimizer.weight_decay}
+      end_weight_decay: ${policy.megatron_cfg.optimizer.weight_decay}
+      weight_decay_incr_style: "constant"
+      lr_decay_style: "constant"
+      lr_decay_iters: null
+      lr_warmup_iters: 10
+      lr_warmup_init: 0.3e-7
+
+    distributed_data_parallel_config:
+      grad_reduce_in_fp32: false
+      overlap_grad_reduce: true
+      overlap_param_gather: true
+      average_in_collective: false
+      use_custom_fsdp: false
+      data_parallel_sharding_strategy: "optim_grads_params"
+
+    env_vars: null
+
+  dynamic_batching:
+    enabled: False
+    train_mb_tokens: ${mul:${policy.max_total_sequence_length}, ${policy.train_micro_batch_size}}
+    logprob_mb_tokens: ${mul:${policy.max_total_sequence_length}, ${policy.logprob_batch_size}}
+    sequence_length_round: 64
+
+  sequence_packing:
+    enabled: True
+    train_mb_tokens: ${mul:${policy.max_total_sequence_length}, ${policy.train_micro_batch_size}}
+    logprob_mb_tokens: ${mul:${policy.max_total_sequence_length}, ${policy.logprob_batch_size}}
+    algorithm: "modified_first_fit_decreasing"
+    sequence_length_round: 64
+
+  make_sequence_length_divisible_by: ${policy.megatron_cfg.tensor_model_parallel_size}
+  max_grad_norm: 1.0
+
+  optimizer: null
+  scheduler: null
+
+  offload_optimizer_for_logprob: False
+
+  generation:
+    backend: "vllm"
+    max_new_tokens: ${policy.max_total_sequence_length}
+    temperature: 1.0
+    top_p: 1.0
+    top_k: null
+    stop_token_ids: null
+    stop_strings: null
+    vllm_cfg:
+      async_engine: false
+      kv_cache_dtype: auto
+      precision: ${policy.precision}
+      tensor_parallel_size: 2  # Use both GPUs for generation
+      pipeline_parallel_size: 1
+      expert_parallel_size: 1
+      gpu_memory_utilization: 0.85  # Increased from 0.5 for H200's large memory
+      max_model_len: ${policy.max_total_sequence_length}
+      enforce_eager: False
+      use_deep_gemm: False
+      num_last_layers_in_bf16: 0
+      num_first_layers_in_bf16: 0
+      expose_http_server: true
+      http_server_serving_chat_kwargs:
+        enable_auto_tools: true
+        tool_parser: qwen3_coder
+        reasoning_parser: deepseek_r1
+
+    vllm_kwargs:
+      mamba_ssm_cache_dtype: "float32"
+      compilation_config:
+        use_inductor: False
+    colocated:
+      enabled: true  # Share GPUs between training and generation
+      resources:
+        gpus_per_node: null
+        num_nodes: null
+
+data:
+  train_jsonl_fpath: "/path/to/train.jsonl"
+  validation_jsonl_fpath: "/path/to/validation.jsonl"
+  shuffle: False
+  num_workers: 2  # Reduced from 1, can use more CPU threads
+
+env:
+  should_use_nemo_gym: true
+  nemo_gym:
+    config_paths:
+    - responses_api_models/vllm_model/configs/vllm_model_for_training.yaml
+    - resources_servers/math_with_judge/configs/math_with_judge.yaml
+    - resources_servers/code_gen/configs/code_gen.yaml
+    - resources_servers/workplace_assistant/configs/workplace_assistant.yaml
+    - resources_servers/mcqa/configs/mcqa.yaml
+    - resources_servers/instruction_following/configs/instruction_following.yaml
+    - resources_servers/structured_outputs/configs/structured_outputs_json.yaml
+    
+    # ====================================================================
+    # ENHANCED MATH REWARDS CONFIGURATION (2x H200 Optimized)
+    # Multi-component scoring + difficulty scaling
+    # ====================================================================
+    math_with_judge:
+      resources_servers:
+        math_with_judge:
+          judge_model_server:
+            name: policy_model
+          should_use_judge: true  # Enable LLM judge for multi-component scoring
+          
+          # Multi-component reward weights
+          format_weight: 0.1      # Reward for <think> and \boxed{} tags
+          outcome_weight: 2.0     # Reward for correct answer (scaled by difficulty)
+          axiom_weight: 0.1       # Reward for reasoning tags [Axiom], [Def], etc.
+          coherence_weight: 0.2   # Reward for logical reasoning flow
+          relevance_weight: 0.1   # Reward for addressing the problem
+          efficiency_weight: 0.05 # Reward for concise reasoning
+          
+          # Difficulty scaling settings
+          use_difficulty_scaling: true  # Enable difficulty-based reward scaling
+          difficulty_scaling_cap: 4.0   # Max multiplier for hard problems
+          
+          # Trace logging for analysis
+          save_traces: true
+          trace_dir: "logs/training_traces_2xH200"
+          
+          judge_responses_create_params:
+            input: []
+            max_new_tokens: 512
+            temperature: 0.1  # Low temperature for consistent evaluations
+    
+    code_gen:
+      resources_servers:
+        code_gen:
+          num_processes: 256  # Reduced from 1024 for 2 GPUs
+          unit_test_timeout_secs: 10
+          debug: false
+
+logger:
+  log_dir: "logs_2xH200"
+  num_val_samples_to_print: 0
+  wandb_enabled: false
+  tensorboard_enabled: false
+  mlflow_enabled: false
+  monitor_gpus: true
+  swanlab_enabled: false
+  wandb:
+    project: "grpo-2xH200"
+    name: "enhanced-math-rewards-2xH200"
+  tensorboard: {}
+  mlflow:
+    experiment_name: "grpo-2xH200"
+    run_name: "enhanced-math-rewards-2xH200"
+  gpu_monitoring:
+    collection_interval: 10
+    flush_interval: 10
+
+cluster:
+  gpus_per_node: 2  # 2x H200 GPUs
+  num_nodes: 1      # Single node setup
