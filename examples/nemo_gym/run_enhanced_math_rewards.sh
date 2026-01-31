@@ -1,88 +1,66 @@
+cat << 'EOF' > run_nano.sh
 #!/bin/bash
-# Launch script for Enhanced Math Rewards GRPO Training
-# This script runs GRPO training with multi-component scoring and difficulty scaling
+set -e
 
-set -e  # Exit on error
+# --- CONFIGURATION ---
+export WANDB_API_KEY="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"
+export MODEL_CHECKPOINT="owenisas/nemotron-3-nano-reasoning"
+export BASE_DIR="/workspace"
+export DATA_DIR="$BASE_DIR/data"
+export CODE_DIR="$BASE_DIR/RL"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# --- FIX 1: REDIRECT RAY & CACHE (Fixes Disk Full Crash) ---
+# We force Ray to write temp files to your large disk, not the small boot disk.
+export RAY_TMPDIR="$BASE_DIR/ray_tmp"
+export TMPDIR="$BASE_DIR/tmp"
+export HF_HOME="$BASE_DIR/hf_cache"
+export NEMO_CACHE_DIR="$BASE_DIR/nemo_cache"
 
-echo -e "${GREEN}=====================================================${NC}"
-echo -e "${GREEN}Enhanced Math Rewards GRPO Training${NC}"
-echo -e "${GREEN}Multi-component scoring + Difficulty scaling${NC}"
-echo -e "${GREEN}=====================================================${NC}"
+mkdir -p "$RAY_TMPDIR" "$TMPDIR" "$HF_HOME" "$NEMO_CACHE_DIR"
 
-# Check if config file exists
-CONFIG_NAME="${1:-grpo_enhanced_math_rewards}"
-CONFIG_FILE="$(pwd)/${CONFIG_NAME}.yaml"
+echo ">>> [0/5] Cleaning up corrupted sessions..."
+# Clean up previous crashed sessions to free ports and memory
+pkill -9 -f "ray" || true
+pkill -9 -f "python" || true
+rm -rf /tmp/ray/*
 
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo -e "${RED}Error: Config file not found: ${CONFIG_FILE}${NC}"
-    echo -e "${YELLOW}Usage: $0 [config_name]${NC}"
-    echo -e "${YELLOW}Example: $0 grpo_enhanced_math_rewards${NC}"
-    exit 1
+echo ">>> [1/5] Installing Dependencies..."
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+
+apt-get update && apt-get install -y git
+
+echo ">>> [2/5] Setting up Codebase..."
+if [ ! -d "$CODE_DIR" ]; then
+    # Clone your enhanced fork instead of the original repo
+    git clone -b enhanced-math-rewards https://github.com/owenisas/NeMo-RL-Enhanced-Math-Rewards.git "$CODE_DIR"
 fi
+cd "$CODE_DIR"
+git submodule update --init --recursive
 
-echo -e "${GREEN}Using config: ${CONFIG_NAME}${NC}"
+echo ">>> [3/5] Downloading Data..."
+mkdir -p "$DATA_DIR"
+# Install datasets for the download script
+uv pip install datasets
 
-# Parse optional overrides from command line
-OVERRIDES=""
-shift || true  # Remove first arg if exists
-while [[ $# -gt 0 ]]; do
-    OVERRIDES="$OVERRIDES $1"
-    shift
-done
+# Use the custom download script for Big-Math-RL-Verified
+python3 examples/nemo_gym/download_bigmath_dataset.py --output-dir "$DATA_DIR/bigmath"
 
-# Display key settings
-echo ""
-echo -e "${YELLOW}Enhanced Features:${NC}"
-echo "  ✓ Multi-component reward scoring"
-echo "  ✓ Difficulty-based reward scaling"
-echo "  ✓ LLM judge with JSON evaluation"
-echo "  ✓ Trace logging to logs/training_traces/"
-echo ""
+# Use the processed Big-Math files
+TRAIN_FILE="$DATA_DIR/bigmath/train.jsonl"
+VAL_FILE="$DATA_DIR/bigmath/validation.jsonl"
 
-# Check if data paths are set
-echo -e "${YELLOW}Checking configuration...${NC}"
-if grep -q "/path/to/" "$CONFIG_FILE"; then
-    echo -e "${RED}Warning: Data paths not configured!${NC}"
-    echo -e "${YELLOW}Please update the following in ${CONFIG_NAME}.yaml:${NC}"
-    echo "  - data.train_jsonl_fpath"
-    echo "  - data.validation_jsonl_fpath"
-    echo ""
-    echo -e "${YELLOW}Or use example data for testing:${NC}"
-    echo "  ./run_enhanced_math_rewards.sh $CONFIG_NAME \\"
-    echo "    ++data.train_jsonl_fpath=resources_servers/math_with_judge/data/example.jsonl \\"
-    echo "    ++data.validation_jsonl_fpath=resources_servers/math_with_judge/data/example.jsonl"
-    echo ""
-    read -p "Continue anyway? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-fi
+echo ">>> [4/5] Launching Training (H200 Optimized)..."
 
-# Create logs directory
-mkdir -p logs/training_traces
-echo -e "${GREEN}✓ Created trace logging directory${NC}"
+# Use the enhanced config we created
+uv run examples/nemo_gym/run_grpo_nemo_gym.py \
+    --config examples/nemo_gym/grpo_enhanced_math_rewards_2xH200.yaml \
+    data.train_jsonl_fpath="$TRAIN_FILE" \
+    data.validation_jsonl_fpath="$VAL_FILE" \
+    policy.model_name="$MODEL_CHECKPOINT" \
+    logger.wandb_enabled=True
+EOF
 
-# Run training
-echo ""
-echo -e "${GREEN}Starting GRPO training...${NC}"
-echo -e "${YELLOW}Command:${NC}"
-echo "python run_grpo_nemo_gym.py --config-path=. --config-name=${CONFIG_NAME} ${OVERRIDES}"
-echo ""
-
-python run_grpo_nemo_gym.py \
-    --config-path=. \
-    --config-name="${CONFIG_NAME}" \
-    ${OVERRIDES}
-
-echo ""
-echo -e "${GREEN}=====================================================${NC}"
-echo -e "${GREEN}Training complete!${NC}"
-echo -e "${GREEN}Check logs/training_traces/ for detailed reward analysis${NC}"
-echo -e "${GREEN}=====================================================${NC}"
+# Run it
+chmod +x run_nano.sh
+./run_nano.sh
