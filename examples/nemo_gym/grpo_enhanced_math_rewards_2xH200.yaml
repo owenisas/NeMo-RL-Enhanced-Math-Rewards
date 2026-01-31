@@ -68,7 +68,7 @@ checkpointing:
   checkpoint_must_save_by: "00:03:40:00"
 
 policy:
-  model_name: "/path/to/hf_checkpoint"
+  model_name: "owenisas/nemotron-3-nano-reasoning"
   tokenizer:
     name: ${policy.model_name}
   train_global_batch_size: 128  # Reduced from 2048 for 2 GPUs
@@ -271,7 +271,6 @@ env:
           
           judge_responses_create_params:
             input: []
-            max_new_tokens: 512
             temperature: 0.1  # Low temperature for consistent evaluations
     
     code_gen:
