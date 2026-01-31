@@ -41,11 +41,13 @@ git submodule update --init --recursive
 
 echo ">>> [3/5] Downloading Data..."
 mkdir -p "$DATA_DIR"
-# Install datasets for the download script
+# Install datasets for the download script using uvx for global access if needed, 
+# or uv pip install for the local environment.
 uv pip install datasets
 
 # Use the custom download script for Big-Math-RL-Verified
-python3 examples/nemo_gym/download_bigmath_dataset.py --output-dir "$DATA_DIR/bigmath"
+# Using full path from the current directory (which is $CODE_DIR)
+python3 "$CODE_DIR/examples/nemo_gym/download_bigmath_dataset.py" --output-dir "$DATA_DIR/bigmath"
 
 # Use the processed Big-Math files
 TRAIN_FILE="$DATA_DIR/bigmath/train.jsonl"
@@ -54,8 +56,9 @@ VAL_FILE="$DATA_DIR/bigmath/validation.jsonl"
 echo ">>> [4/5] Launching Training (H200 Optimized)..."
 
 # Use the enhanced config we created
-uv run examples/nemo_gym/run_grpo_nemo_gym.py \
-    --config examples/nemo_gym/grpo_enhanced_math_rewards_2xH200.yaml \
+# Using full path for the config file
+uv run "$CODE_DIR/examples/nemo_gym/run_grpo_nemo_gym.py" \
+    --config "$CODE_DIR/examples/nemo_gym/grpo_enhanced_math_rewards_2xH200.yaml" \
     data.train_jsonl_fpath="$TRAIN_FILE" \
     data.validation_jsonl_fpath="$VAL_FILE" \
     policy.model_name="$MODEL_CHECKPOINT" \
