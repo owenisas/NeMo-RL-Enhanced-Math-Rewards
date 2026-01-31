@@ -20,9 +20,10 @@ mkdir -p "$RAY_TMPDIR" "$TMPDIR" "$HF_HOME" "$NEMO_CACHE_DIR"
 
 echo ">>> [0/5] Cleaning up corrupted sessions..."
 # Clean up previous crashed sessions to free ports and memory
-pkill -9 -f "ray" || true
-pkill -9 -f "python" || true
-rm -rf /tmp/ray/*
+# Use timeout to prevent hanging on large /tmp directories
+timeout 10s pkill -9 -f "ray" || true
+timeout 10s pkill -9 -f "python" || true
+timeout 15s rm -rf /tmp/ray/* || echo "Ray cleanup timed out, continuing anyway..."
 
 echo ">>> [1/5] Installing Dependencies..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
