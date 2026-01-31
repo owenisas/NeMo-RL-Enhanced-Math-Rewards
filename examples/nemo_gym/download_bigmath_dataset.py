@@ -43,6 +43,20 @@ def prepare_bigmath_dataset(
     # Process training data
     if train_split in dataset:
         train_data = dataset[train_split]
+        
+        # If validation split is missing, create one from training data
+        if val_split not in dataset:
+            print(f"\n⚠️ Validation split '{val_split}' not found. Splitting from training data...")
+            # Take 1000 samples for validation, rest for training
+            val_size = min(1000, int(len(train_data) * 0.05))
+            split_data = train_data.train_test_split(test_size=val_size, seed=42)
+            train_data = split_data['train']
+            val_data_to_save = split_data['test']
+            
+            val_output = os.path.join(output_dir, "validation.jsonl")
+            convert_to_jsonl(val_data_to_save, val_output)
+            print(f"✓ Created validation set ({len(val_data_to_save)} samples) at: {val_output}")
+
         print(f"\n📝 Processing training data ({len(train_data)} samples)...")
         
         if max_train_samples:
@@ -53,8 +67,8 @@ def prepare_bigmath_dataset(
         convert_to_jsonl(train_data, train_output)
         print(f"✓ Saved to: {train_output}")
     
-    # Process validation data
-    if val_split in dataset:
+    # Process validation data (if it was provided directly by HF)
+    elif val_split in dataset:
         val_data = dataset[val_split]
         print(f"\n📝 Processing validation data ({len(val_data)} samples)...")
         

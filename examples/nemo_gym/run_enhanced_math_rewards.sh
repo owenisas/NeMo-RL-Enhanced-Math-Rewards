@@ -4,11 +4,16 @@ set -e
 
 # --- CONFIGURATION ---
 export HF_TOKEN="your_hf_token_here" # <--- ADD YOUR TOKEN HERE
-export WANDB_API_KEY="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"
+export WANDB_API_KEY="your_wandb_key_here" # <--- ADD YOUR WANDB KEY HERE
 export MODEL_CHECKPOINT="owenisas/nemotron-3-nano-reasoning"
 export BASE_DIR="/workspace"
 export DATA_DIR="$BASE_DIR/data"
 export CODE_DIR="$BASE_DIR/RL"
+
+# --- FIX 2: VERSION MISMATCH & VENV REBUILD ---
+# Forces Ray to rebuild environments with our updated Gym code
+export NRL_FORCE_REBUILD_VENVS=true
+export NRL_IGNORE_VERSION_MISMATCH=1
 
 # --- FIX 1: REDIRECT RAY & CACHE (Fixes Disk Full Crash) ---
 # We force Ray to write temp files to your large disk, not the small boot disk.
