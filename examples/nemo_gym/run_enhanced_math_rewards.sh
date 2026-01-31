@@ -18,18 +18,11 @@ export NEMO_CACHE_DIR="$BASE_DIR/nemo_cache"
 
 mkdir -p "$RAY_TMPDIR" "$TMPDIR" "$HF_HOME" "$NEMO_CACHE_DIR"
 
-echo ">>> [0/5] Cleaning up corrupted sessions..."
-# Clean up previous crashed sessions to free ports and memory
-# Use timeout to prevent hanging on large /tmp directories
-timeout 10s pkill -9 -f "ray" || true
-timeout 10s pkill -9 -f "python" || true
-timeout 15s rm -rf /tmp/ray/* || echo "Ray cleanup timed out, continuing anyway..."
+apt-get update && apt-get install -y git
 
 echo ">>> [1/5] Installing Dependencies..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
-
-apt-get update && apt-get install -y git
 
 echo ">>> [2/5] Setting up Codebase..."
 if [ ! -d "$CODE_DIR" ]; then
