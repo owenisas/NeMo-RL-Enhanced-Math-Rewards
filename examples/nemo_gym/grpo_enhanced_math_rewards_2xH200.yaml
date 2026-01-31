@@ -269,8 +269,10 @@ env:
           save_traces: true
           trace_dir: "logs/training_traces_2xH200"
           
+          # NEW: Judge parameters
           judge_responses_create_params:
             input: []
+            max_output_tokens: 512
             temperature: 0.1  # Low temperature for consistent evaluations
     
     code_gen:

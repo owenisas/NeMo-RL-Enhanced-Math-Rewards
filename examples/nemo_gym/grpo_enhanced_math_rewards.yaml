@@ -294,8 +294,10 @@ env:
           save_traces: true
           trace_dir: "logs/training_traces"  # Will be created automatically
           
+          # NEW: Judge parameters
           judge_responses_create_params:
             input: []
+            max_output_tokens: 512
             temperature: 0.1  # Low temperature for consistent judge evaluations
     
     # Original code_gen settings (unchanged)
