@@ -70,8 +70,10 @@ def prepare_bigmath_dataset(
     print("✅ Dataset preparation complete!")
     print("=" * 70)
     print(f"\nTo use this dataset, update your config:")
-    print(f"  data.train_jsonl_fpath: {os.path.abspath(train_output)}")
-    print(f"  data.validation_jsonl_fpath: {os.path.abspath(val_output)}")
+    if 'train_output' in locals():
+        print(f"  data.train_jsonl_fpath: {os.path.abspath(train_output)}")
+    if 'val_output' in locals():
+        print(f"  data.validation_jsonl_fpath: {os.path.abspath(val_output)}")
     print()
 
 def convert_to_jsonl(dataset, output_path: str):
