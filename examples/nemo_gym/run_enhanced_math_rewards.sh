@@ -3,8 +3,11 @@ cat << 'EOF' > run_nano.sh
 set -e
 
 # --- CONFIGURATION ---
-export HF_TOKEN="your_hf_token_here" # <--- ADD YOUR TOKEN HERE
-export WANDB_API_KEY="your_wandb_key_here" # <--- ADD YOUR WANDB KEY HERE
+# Set these environment variables before running:
+#   export HF_TOKEN="your_huggingface_token"
+#   export WANDB_API_KEY="your_wandb_key"  # optional
+export HF_TOKEN="${HF_TOKEN:-your_hf_token_here}"
+export WANDB_API_KEY="${WANDB_API_KEY:-}"  # Optional
 export MODEL_CHECKPOINT="owenisas/nemotron-3-nano-reasoning"
 export BASE_DIR="/workspace"
 export DATA_DIR="$BASE_DIR/data"
@@ -38,6 +41,10 @@ if [ ! -d "$CODE_DIR" ]; then
 fi
 # Use -C to avoid changing the terminal's working directory globally
 git -C "$CODE_DIR" submodule update --init --recursive
+
+echo ">>> [2.1/5] Installing NeMo-Gym submodule..."
+# This ensures that 'import nemo_gym' works in all environments
+uv pip install -e "$CODE_DIR/3rdparty/Gym-workspace/Gym"
 
 echo ">>> [2.5/5] Pre-downloading Model Weights..."
 # Use huggingface-cli to ensure weights are fully downloaded locally
@@ -78,7 +85,7 @@ uv run "$CODE_DIR/examples/nemo_gym/run_grpo_nemo_gym.py" \
     data.train_jsonl_fpath="$TRAIN_FILE" \
     data.validation_jsonl_fpath="$VAL_FILE" \
     policy.model_name="$LOCAL_MODEL_DIR" \
-    logger.wandb_enabled=True
+    logger.wandb_enabled=False
 EOF
 
 # Run it

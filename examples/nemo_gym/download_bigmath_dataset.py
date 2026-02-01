@@ -96,6 +96,9 @@ def convert_to_jsonl(dataset, output_path: str):
     
     Expected format for each line:
     {
+        "responses_create_params": {
+            "input": [{"role": "user", "content": "..."}]
+        },
         "question": "...",
         "expected_answer": "...",
         "llama8b_solve_rate": 0.5,  # Optional: for difficulty scaling
@@ -103,11 +106,22 @@ def convert_to_jsonl(dataset, output_path: str):
         "source": "AMC12"           # Optional: for logging
     }
     """
+    PROMPT_TEMPLATE = "Solve the following math problem. Make sure to put the answer (and only answer) inside \\boxed{}.\n\n{question}"
+    
     with open(output_path, 'w') as f:
         for item in dataset:
+            # Extract question text
+            question = item.get("problem", item.get("question", item.get("prompt", "")))
+            
+            # Format the prompt for the model
+            formatted_prompt = PROMPT_TEMPLATE.format(question=question)
+            
             # Map dataset fields to NeMo RL format
             entry = {
-                "question": item.get("problem", item.get("question", item.get("prompt", ""))),
+                "responses_create_params": {
+                    "input": [{"role": "user", "content": formatted_prompt}]
+                },
+                "question": question,
                 "expected_answer": item.get("answer", item.get("expected_answer", "")),
             }
             
